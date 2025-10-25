@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.so
+*.a
+
+# TA-Lib
+ta-lib/
+ta-lib-0.4.0-src.tar.gz
+config.py
+data/
