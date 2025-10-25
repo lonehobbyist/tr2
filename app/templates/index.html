@@ -9,6 +9,12 @@
 <body>
     <div class="container">
         <h1 class="mt-5">NIFTY50 Options Analysis</h1>
+        {% if user_logged_in %}
+            <p>Welcome User!</p>
+        {% else %}
+            <p>Please log in.</p>
+            <a href="{{ login_link }}">Click here to login to Fyers and get the auth code.</a>
+        {% endif %}        
         <div class="row mt-4">
             <div class="col-md-6">
                 <h2>NIFTY50 Data</h2>
@@ -41,6 +47,12 @@
                 </div>
             </div>
         </div>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <!-- <h2>NIFTY50 Data</h2>                -->
+                <input type="button" id="btnFetchSignals" value="Get Signals" />
+            </div>
+        </div>
         <div id="signals-container" class="mt-5" style="display: none;">
             <h2>Trading Signals</h2>
             <ul id="signals-list" class="list-group"></ul>
@@ -48,6 +60,7 @@
     </div>
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <!-- <script src="{{ url_for('static', filename='app.js') }}"></script> -->
+    <script src="{{ url_for('static', filename='app.js') }}?t={{ time }}"></script>
 </body>
 </html>
