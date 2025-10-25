@@ -2,3 +2,4 @@ Flask
 pandas
 fyers-apiv3
 TA-Lib
+plotly

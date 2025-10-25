@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIFTY50 Options Analysis</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Advanced Analysis</h1>
+        <p><a href="/">Back to Data Download</a></p>
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h2>Analysis Configuration</h2>
+                <form id="analysis-form" action="/analysis" method="post">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="start-date">Start Date</label>
+                            <input type="date" class="form-control" id="start-date" name="start_date" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="end-date">End Date</label>
+                            <input type="date" class="form-control" id="end-date" name="end_date" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="strategy">Strategy</label>
+                            <select class="form-control" id="strategy" name="strategy">
+                                <option value="ema_crossover">EMA Crossover</option>
+                                <option value="vwap_crossover">VWAP Crossover</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Run Analysis</button>
+                </form>
+            </div>
+        </div>
+        {% if data_summary %}
+        <div id="summary-container" class="mt-5">
+            <h2>Data Summary</h2>
+            <p><strong>NIFTY50 Data Available For:</strong> {{ data_summary.nifty_dates | join(', ') }}</p>
+            <p><strong>Options Data Available For:</strong></p>
+            <ul>
+                {% for symbol, dates in data_summary.options_dates.items() %}
+                <li><strong>{{ symbol }}:</strong> {{ dates | join(', ') }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% if chart_div %}
+        <div id="results-container" class="mt-5">
+            <h2>Analysis Results</h2>
+            <div id="chart">{{ chart_div|safe }}</div>
+        </div>
+        {% endif %}
+    </div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,14 +1,11 @@
-#region Imports
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify
 from fyers_apiv3 import fyersModel
 import pandas as pd
 import talib
 import os
 import logging
-from datetime import datetime
-
-from app.config import FYERS_CLIENT_ID, FYERS_SECRET_KEY, FYERS_REDIRECT_URI, TESTING, DATA_FOLDER_PATH
-#endregion Imports
+from config import FYERS_CLIENT_ID, FYERS_SECRET_KEY, FYERS_REDIRECT_URI, TESTING
+from .helpers import load_data_from_csv, calculate_vwap, get_data_summary, create_candlestick_chart
 
 bp = Blueprint('main', __name__)
 
@@ -21,7 +18,6 @@ class MockFyers:
             ]
         }
 
-fyers = None
 # Initialize Fyers API client
 if TESTING:
     fyers = MockFyers()
@@ -32,37 +28,8 @@ else:
 access_token = None
 
 @bp.route('/')
-def index():    
-    login_link = ''
-    if 'auth_code' in request.args and 'code' in request.args:
-        # auth_code = request.args.get('auth_code')
-        # code = request.args.get('code')
-        callback()       
-        redirect(url_for('main.index'))    
-
-    if access_token == None:
-        try:
-            session = fyersModel.SessionModel(client_id=FYERS_CLIENT_ID,
-                                            secret_key=FYERS_SECRET_KEY,
-                                            redirect_uri=FYERS_REDIRECT_URI,
-                                            response_type="code")
-            response = session.generate_authcode()
-            logging.info("Generated auth code for Fyers login.")
-            # return f'<a href="{response}">Click here to login to Fyers and get the auth code.</a>'
-            login_link = response
-        except Exception as e:
-            logging.error(f"Error generating auth code: {e}")
-            return "Error generating auth code. Please check the logs.", 500
-    return render_template('index.html', user_logged_in=access_token!=None, login_link=login_link, time=datetime.now().timestamp())    
-    
-@bp.route('/routes')
-def list_routes():
-    output = []
-    for rule in bp.url_map.iter_rules():
-        methods = ','.join(sorted(rule.methods - {'HEAD', 'OPTIONS'}))
-        line = f"{rule.endpoint:30s} | {methods:10s} | {rule.rule}"
-        output.append(line)
-    return "<pre>" + "\n".join(sorted(output)) + "</pre>"
+def index():
+    return render_template('index.html')
 
 @bp.route('/login')
 def login():
@@ -78,10 +45,9 @@ def login():
         logging.error(f"Error generating auth code: {e}")
         return "Error generating auth code. Please check the logs.", 500
 
-#@bp.route('/callback')
+@bp.route('/callback')
 def callback():
     global access_token
-    global fyers
     try:
         auth_code = request.args.get('auth_code')
         session = fyersModel.SessionModel(client_id=FYERS_CLIENT_ID,
@@ -93,7 +59,6 @@ def callback():
         response = session.generate_token()
         access_token = response['access_token']
         fyers.token = access_token
-        fyers = fyersModel.FyersModel(token=access_token,is_async=False,client_id=FYERS_CLIENT_ID,log_path="")
         logging.info("Successfully obtained access token.")
         return "Login successful! You can now use the application."
     except Exception as e:
@@ -130,10 +95,7 @@ def download_nifty_data():
                 day_str = day.strftime('%Y-%m-%d')
                 day_df = df[df.index.date == day]
                 if not day_df.empty:
-                    tmpFilePath = f'{DATA_FOLDER_PATH}NIFTY50_{day_str}.csv'
-                    if os.path.exists(tmpFilePath):
-                        os.remove(tmpFilePath)
-                    day_df.to_csv(tmpFilePath)
+                    day_df.to_csv(f'data/NIFTY50_{day_str}.csv')
 
             logging.info('NIFTY50 data downloaded and saved successfully.')
             return jsonify({'message': 'NIFTY50 data downloaded successfully.'})
@@ -175,11 +137,7 @@ def download_options_data():
                 day_str = day.strftime('%Y-%m-%d')
                 day_df = df[df.index.date == day]
                 if not day_df.empty:
-                    tmpFilePath = f'{DATA_FOLDER_PATH}{symbol.replace(":", "_")}_{day_str}.csv'
-                    if os.path.exists(tmpFilePath):
-                        os.remove(tmpFilePath)
-                    day_df.to_csv(tmpFilePath)
-                    #day_df.to_csv(f'data/{symbol.replace(":", "_")}_{day_str}.csv')
+                    day_df.to_csv(f'data/{symbol.replace(":", "_")}_{day_str}.csv')
 
             logging.info(f'Options data for {symbol} downloaded and saved successfully.')
             return jsonify({'message': f'Options data for {symbol} downloaded successfully.'})
@@ -190,10 +148,62 @@ def download_options_data():
         logging.error(f"Error downloading options data for {symbol}: {e}")
         return jsonify({'error': str(e)}), 500
 
-@bp.route('/get_signals', methods=['POST'])
+def run_analysis(start_date, end_date, strategy):
+    data_summary = get_data_summary()
+    nifty_df = load_data_from_csv("NIFTY50", start_date, end_date)
+
+    if nifty_df.empty:
+        return data_summary, None
+
+    if strategy == 'ema_crossover':
+        nifty_df['ema10'] = talib.EMA(nifty_df['close'], timeperiod=10)
+        nifty_df['ema20'] = talib.EMA(nifty_df['close'], timeperiod=20)
+        nifty_df['signal'] = (nifty_df['close'] > nifty_df['ema10']) & (nifty_df['close'] > nifty_df['ema20']) & \
+                           (nifty_df['close'].shift(1) < nifty_df[['ema10', 'ema20']].shift(1).max(axis=1))
+    elif strategy == 'vwap_crossover':
+        nifty_df = calculate_vwap(nifty_df)
+        nifty_df['signal'] = (nifty_df['close'] > nifty_df['vwap']) & (nifty_df['close'].shift(1) < nifty_df['vwap'].shift(1))
+
+    signal_times = nifty_df[nifty_df['signal']].index
+
+    charts = ""
+    for symbol in data_summary['options_dates']:
+        option_df = load_data_from_csv(symbol, start_date, end_date)
+        if not option_df.empty:
+            option_signals = []
+            for signal_time in signal_times:
+                if signal_time in option_df.index:
+                    option_row = option_df.loc[signal_time]
+                    if strategy == 'ema_crossover':
+                        option_df['ema10'] = talib.EMA(option_df['close'], timeperiod=10)
+                        option_df['ema20'] = talib.EMA(option_df['close'], timeperiod=20)
+                        if option_row['close'] > option_row['ema10'] and option_row['close'] > option_row['ema20']:
+                            option_signals.append(signal_time)
+                    elif strategy == 'vwap_crossover':
+                        option_df = calculate_vwap(option_df)
+                        if option_row['close'] > option_row['vwap']:
+                            option_signals.append(signal_time)
+
+            charts += create_candlestick_chart(option_df, option_signals, symbol)
+
+    return data_summary, charts
+
+@bp.route('/analysis', methods=['GET', 'POST'])
+def analysis():
+    if request.method == 'POST':
+        start_date = request.form.get('start_date')
+        end_date = request.form.get('end_date')
+        strategy = request.form.get('strategy')
+        data_summary, chart_div = run_analysis(start_date, end_date, strategy)
+        return render_template('analysis.html', data_summary=data_summary, chart_div=chart_div)
+
+    data_summary = get_data_summary()
+    return render_template('analysis.html', data_summary=data_summary)
+
+@bp.route('/get_signals', methods=['GET'])
 def get_signals():
-    # if not TESTING and not access_token:
-    #     return jsonify({'error': 'Not logged in'}), 401
+    if not TESTING and not access_token:
+        return jsonify({'error': 'Not logged in'}), 401
 
     logging.info("Starting signal generation.")
     signals = []
@@ -226,7 +236,7 @@ def get_signals():
                             if signal_time in option_df.index:
                                 option_row = option_df.loc[signal_time]
                                 if option_row['close'] > option_row['ema10'] and option_row['close'] > option_row['ema20']:
-                                    signals.append(f"Signal found for {option_file.split('.')[0]} at {signal_time}")
+                                    signals.append(f"Signal found for {option_file.split('_')[0]} at {signal_time}")
             except Exception as e:
                 logging.error(f"Error processing {nifty_file}: {e}")
 

@@ -1,9 +1,4 @@
 $(document).ready(function() {
-
-    $('#btnFetchSignals').click(function(event) {
-        fetchSignals();
-    });
-
     $('#nifty-form').submit(function(event) {
         event.preventDefault();
         const startDate = $('#start-date').val();
@@ -59,8 +54,7 @@ $(document).ready(function() {
     function fetchSignals() {
         $.ajax({
             url: '/get_signals',
-            method: 'POST',
-            contentType: 'application/json',
+            method: 'GET',
             success: function(response) {
                 console.log(response);
                 $('#signals-container').show();
