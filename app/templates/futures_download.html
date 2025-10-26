@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Futures & Options Data Download</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Futures & Options Data Download</h1>
+        <p><a href="/">Back to NIFTY50 Download</a></p>
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <h2>Futures Data</h2>
+                <form id="futures-form">
+                    <div class="form-group">
+                        <label for="futures-symbol">Futures Symbol</label>
+                        <select class="form-control" id="futures-symbol" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="start-date-futures">Start Date</label>
+                        <input type="date" class="form-control" id="start-date-futures" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="end-date-futures">End Date</label>
+                        <input type="date" class="form-control" id="end-date-futures" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Download Futures Data</button>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h2>Options Data</h2>
+                <form id="options-form">
+                    <div class="form-group">
+                        <label for="expiry-dropdown">Expiry</label>
+                        <select class="form-control" id="expiry-dropdown" disabled></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="strike-dropdown">Strike Price</label>
+                        <select class="form-control" id="strike-dropdown" disabled></select>
+                    </div>
+                    <div class="form-group">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="ce-checkbox" checked>
+                            <label class="form-check-label" for="ce-checkbox">Call (CE)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="pe-checkbox" checked>
+                            <label class="form-check-label" for="pe-checkbox">Put (PE)</label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" disabled>Download Options Data</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Populate futures symbols
+            $.get('/api/get_symbols', function(data) {
+                const futuresSymbolDropdown = $('#futures-symbol');
+                futuresSymbolDropdown.empty().append($('<option>-- Select Symbol --</option>').prop('disabled', true).prop('selected', true));
+                data.symbols.forEach(function(symbol) {
+                    futuresSymbolDropdown.append($('<option></option>').attr('value', symbol).text(symbol));
+                });
+            });
+
+            // Handle futures symbol change
+            function populateExpiries() {
+                const selectedSymbol = $('#futures-symbol').val();
+                if (selectedSymbol) {
+                    $.get('/api/get_expiries?symbol=' + selectedSymbol, function(data) {
+                        const expiryDropdown = $('#expiry-dropdown');
+                        expiryDropdown.empty().append($('<option>-- Select Expiry --</option>').prop('disabled', true).prop('selected', true)).prop('disabled', false);
+                        data.expiries.forEach(function(expiry) {
+                            expiryDropdown.append($('<option></option>').attr('value', expiry).text(expiry));
+                        });
+                    });
+                }
+            }
+
+            $('#futures-symbol').change(populateExpiries);
+
+            // Initial population
+            $.get('/api/get_symbols', function(data) {
+                const futuresSymbolDropdown = $('#futures-symbol');
+                futuresSymbolDropdown.empty().append($('<option>-- Select Symbol --</option>').prop('disabled', true).prop('selected', true));
+                data.symbols.forEach(function(symbol) {
+                    futuresSymbolDropdown.append($('<option></option>').attr('value', symbol).text(symbol));
+                });
+                populateExpiries();
+            });
+
+            // Handle expiry change
+            $('#expiry-dropdown').change(function() {
+                const selectedSymbol = $('#futures-symbol').val();
+                const selectedExpiry = $(this).val();
+                if (selectedSymbol && selectedExpiry) {
+                    // Populate strikes
+                    $.get('/api/get_strikes?symbol=' + selectedSymbol + '&expiry=' + selectedExpiry, function(data) {
+                        const strikeDropdown = $('#strike-dropdown');
+                        strikeDropdown.empty().append($('<option>-- Select Strike --</option>').prop('disabled', true).prop('selected', true)).prop('disabled', false);
+                        data.strikes.forEach(function(strike) {
+                            strikeDropdown.append($('<option></option>').attr('value', strike).text(strike));
+                        });
+                        $('#options-form button').prop('disabled', false);
+                    });
+                }
+            });
+
+            // Handle forms submission
+            $('#futures-form').submit(function(event) {
+                event.preventDefault();
+                const symbol = $('#futures-symbol').val();
+                const startDate = $('#start-date-futures').val();
+                const endDate = $('#end-date-futures').val();
+                $.ajax({
+                    url: '/download_futures_data',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ symbol: symbol, start_date: startDate, end_date: endDate }),
+                    success: function(response) { alert(response.message); },
+                    error: function(error) { alert('Error downloading futures data.'); }
+                });
+            });
+            $('#options-form').submit(function(event) {
+                event.preventDefault();
+                const symbol = $('#futures-symbol').val();
+                const expiry = $('#expiry-dropdown').val();
+                const strike = $('#strike-dropdown').val();
+                const startDate = $('#start-date-futures').val();
+                const endDate = $('#end-date-futures').val();
+                if ($('#ce-checkbox').is(':checked')) {
+                    $.ajax({
+                        url: '/download_options_data_new',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ symbol: symbol, expiry: expiry, strike: strike, option_type: 'CE', start_date: startDate, end_date: endDate }),
+                        success: function(response) { alert(response.message); },
+                        error: function(error) { alert('Error downloading CE options data.'); }
+                    });
+                }
+                if ($('#pe-checkbox').is(':checked')) {
+                    $.ajax({
+                        url: '/download_options_data_new',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ symbol: symbol, expiry: expiry, strike: strike, option_type: 'PE', start_date: startDate, end_date: endDate }),
+                        success: function(response) { alert(response.message); },
+                        error: function(error) { alert('Error downloading PE options data.'); }
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -23,11 +23,18 @@
                             <label for="end-date">End Date</label>
                             <input type="date" class="form-control" id="end-date" name="end_date" required>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-3">
                             <label for="strategy">Strategy</label>
                             <select class="form-control" id="strategy" name="strategy">
                                 <option value="ema_crossover">EMA Crossover</option>
                                 <option value="vwap_crossover">VWAP Crossover</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-3">
+                            <label for="output-format">Output Format</label>
+                            <select class="form-control" id="output-format" name="output_format">
+                                <option value="chart">Chart</option>
+                                <option value="csv">CSV</option>
                             </select>
                         </div>
                     </div>
@@ -38,19 +45,50 @@
         {% if data_summary %}
         <div id="summary-container" class="mt-5">
             <h2>Data Summary</h2>
-            <p><strong>NIFTY50 Data Available For:</strong> {{ data_summary.nifty_dates | join(', ') }}</p>
+            <p><strong>Futures Data Available For:</strong></p>
+            <ul>
+                {% for symbol, dates in data_summary.futures_dates.items() %}
+                <li><strong>{{ symbol }}:</strong> {{ dates | join(', ') }}</li>
+                {% endfor %}
+            </ul>
             <p><strong>Options Data Available For:</strong></p>
             <ul>
-                {% for symbol, dates in data_summary.options_dates.items() %}
-                <li><strong>{{ symbol }}:</strong> {{ dates | join(', ') }}</li>
+                {% for symbol, expiries in data_summary.options_dates.items() %}
+                <li><strong>{{ symbol }}:</strong>
+                    <ul>
+                        {% for expiry, dates in expiries.items() %}
+                        <li><strong>{{ expiry }}:</strong> {{ dates | join(', ') }}</li>
+                        {% endfor %}
+                    </ul>
+                </li>
                 {% endfor %}
             </ul>
         </div>
         {% endif %}
-        {% if chart_div %}
+        {% if results %}
         <div id="results-container" class="mt-5">
             <h2>Analysis Results</h2>
-            <div id="chart">{{ chart_div|safe }}</div>
+            {% if results.output_format == 'chart' %}
+                <div id="chart">{{ results.content|safe }}</div>
+            {% else %}
+                <a href="/export_signals" class="btn btn-success mb-3">Export to CSV</a>
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Signal Time</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for signal in results.content %}
+                        <tr>
+                            <td>{{ signal.symbol }}</td>
+                            <td>{{ signal.time }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
         </div>
         {% endif %}
     </div>

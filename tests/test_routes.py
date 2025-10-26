@@ -4,6 +4,7 @@ from app import create_app
 import json
 import pandas as pd
 import os
+import shutil
 
 class TestRoutes(unittest.TestCase):
 
@@ -16,10 +17,8 @@ class TestRoutes(unittest.TestCase):
 
     def tearDown(self):
         # Clean up dummy data files
-        for f in os.listdir('data'):
-            os.remove(os.path.join('data', f))
         if os.path.exists('data'):
-            os.rmdir('data')
+            shutil.rmtree('data')
 
     @patch('app.routes.access_token', 'dummy_token')
     @patch('app.routes.fyers.history')

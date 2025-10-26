@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, session, Response
 from fyers_apiv3 import fyersModel
 import pandas as pd
 import talib
@@ -30,6 +30,28 @@ access_token = None
 @bp.route('/')
 def index():
     return render_template('index.html')
+
+@bp.route('/futures')
+def futures():
+    return render_template('futures_download.html')
+
+@bp.route('/api/get_symbols', methods=['GET'])
+def get_symbols():
+    logging.info("API: Getting symbols")
+    # Placeholder
+    return jsonify({'symbols': ['NIFTY', 'BANKNIFTY']})
+
+@bp.route('/api/get_expiries', methods=['GET'])
+def get_expiries():
+    logging.info(f"API: Getting expiries for {request.args.get('symbol')}")
+    # Placeholder
+    return jsonify({'expiries': ['2025-11-27', '2025-12-25']})
+
+@bp.route('/api/get_strikes', methods=['GET'])
+def get_strikes():
+    logging.info(f"API: Getting strikes for {request.args.get('symbol')} and {request.args.get('expiry')}")
+    # Placeholder
+    return jsonify({'strikes': [18000, 18100, 18200]})
 
 @bp.route('/login')
 def login():
@@ -148,57 +170,128 @@ def download_options_data():
         logging.error(f"Error downloading options data for {symbol}: {e}")
         return jsonify({'error': str(e)}), 500
 
-def run_analysis(start_date, end_date, strategy):
+@bp.route('/download_futures_data', methods=['POST'])
+def download_futures_data():
+    if not TESTING and not access_token:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    data = request.get_json()
+    symbol = data['symbol']
+    start_date = data['start_date']
+    end_date = data['end_date']
+
+    try:
+        # Create directory structure
+        os.makedirs(f'data/{symbol}', exist_ok=True)
+
+        # Download and save data
+        # ... (similar logic to download_nifty_data) ...
+
+        return jsonify({'message': f'Futures data for {symbol} downloaded successfully.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/download_options_data_new', methods=['POST'])
+def download_options_data_new():
+    if not TESTING and not access_token:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    data = request.get_json()
+    symbol = data['symbol']
+    expiry = data['expiry']
+    strike = data['strike']
+    option_type = data['option_type']
+
+    try:
+        # Create directory structure
+        os.makedirs(f'data/{symbol}/Options/{expiry}', exist_ok=True)
+
+        # Construct option symbol and download data
+        # ...
+
+        return jsonify({'message': 'Options data downloaded successfully.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def run_analysis(start_date, end_date, strategy, output_format):
     data_summary = get_data_summary()
-    nifty_df = load_data_from_csv("NIFTY50", start_date, end_date)
 
-    if nifty_df.empty:
-        return data_summary, None
-
-    if strategy == 'ema_crossover':
-        nifty_df['ema10'] = talib.EMA(nifty_df['close'], timeperiod=10)
-        nifty_df['ema20'] = talib.EMA(nifty_df['close'], timeperiod=20)
-        nifty_df['signal'] = (nifty_df['close'] > nifty_df['ema10']) & (nifty_df['close'] > nifty_df['ema20']) & \
-                           (nifty_df['close'].shift(1) < nifty_df[['ema10', 'ema20']].shift(1).max(axis=1))
-    elif strategy == 'vwap_crossover':
-        nifty_df = calculate_vwap(nifty_df)
-        nifty_df['signal'] = (nifty_df['close'] > nifty_df['vwap']) & (nifty_df['close'].shift(1) < nifty_df['vwap'].shift(1))
-
-    signal_times = nifty_df[nifty_df['signal']].index
-
+    all_signals = []
     charts = ""
-    for symbol in data_summary['options_dates']:
-        option_df = load_data_from_csv(symbol, start_date, end_date)
-        if not option_df.empty:
-            option_signals = []
-            for signal_time in signal_times:
-                if signal_time in option_df.index:
-                    option_row = option_df.loc[signal_time]
-                    if strategy == 'ema_crossover':
-                        option_df['ema10'] = talib.EMA(option_df['close'], timeperiod=10)
-                        option_df['ema20'] = talib.EMA(option_df['close'], timeperiod=20)
-                        if option_row['close'] > option_row['ema10'] and option_row['close'] > option_row['ema20']:
-                            option_signals.append(signal_time)
-                    elif strategy == 'vwap_crossover':
-                        option_df = calculate_vwap(option_df)
-                        if option_row['close'] > option_row['vwap']:
-                            option_signals.append(signal_time)
 
-            charts += create_candlestick_chart(option_df, option_signals, symbol)
+    for symbol in data_summary['futures_dates']:
+        future_df = load_data_from_csv(symbol, start_date, end_date)
+        if future_df.empty:
+            continue
 
-    return data_summary, charts
+        if strategy == 'ema_crossover':
+            future_df['ema10'] = talib.EMA(future_df['close'], timeperiod=10)
+            future_df['ema20'] = talib.EMA(future_df['close'], timeperiod=20)
+            future_df['signal'] = (future_df['close'] > future_df['ema10']) & (future_df['close'] > future_df['ema20']) & \
+                               (future_df['close'].shift(1) < future_df[['ema10', 'ema20']].shift(1).max(axis=1))
+        elif strategy == 'vwap_crossover':
+            future_df = calculate_vwap(future_df)
+            future_df['signal'] = (future_df['close'] > future_df['vwap']) & (future_df['close'].shift(1) < future_df['vwap'].shift(1))
+
+        signal_times = future_df[future_df['signal']].index
+
+        if symbol in data_summary['options_dates']:
+            for expiry in data_summary['options_dates'][symbol]:
+                option_df = load_data_from_csv(symbol, start_date, end_date, expiry=expiry)
+                if not option_df.empty:
+                    option_signals = []
+                    for signal_time in signal_times:
+                        if signal_time in option_df.index:
+                            option_row = option_df.loc[signal_time]
+                            if strategy == 'ema_crossover':
+                                option_df['ema10'] = talib.EMA(option_df['close'], timeperiod=10)
+                                option_df['ema20'] = talib.EMA(option_df['close'], timeperiod=20)
+                                if option_row['close'] > option_row['ema10'] and option_row['close'] > option_row['ema20']:
+                                    option_signals.append(signal_time)
+                                    all_signals.append({'symbol': f"{symbol}-{expiry}-CE/PE", 'time': signal_time}) # Placeholder symbol
+                            elif strategy == 'vwap_crossover':
+                                option_df = calculate_vwap(option_df)
+                                if option_row['close'] > option_row['vwap']:
+                                    option_signals.append(signal_time)
+                                    all_signals.append({'symbol': f"{symbol}-{expiry}-CE/PE", 'time': signal_time}) # Placeholder symbol
+
+                    if output_format == 'chart':
+                        charts += create_candlestick_chart(option_df, option_signals, f"{symbol} {expiry} Options")
+
+    if output_format == 'chart':
+        logging.info("Returning chart")
+        return data_summary, {'output_format': 'chart', 'content': charts}
+    else:
+        logging.info(f"Returning CSV with {len(all_signals)} signals")
+        session['signals'] = all_signals
+        return data_summary, {'output_format': 'csv', 'content': all_signals}
 
 @bp.route('/analysis', methods=['GET', 'POST'])
 def analysis():
+    logging.info(f"Analysis route called with method {request.method}")
     if request.method == 'POST':
         start_date = request.form.get('start_date')
         end_date = request.form.get('end_date')
         strategy = request.form.get('strategy')
-        data_summary, chart_div = run_analysis(start_date, end_date, strategy)
-        return render_template('analysis.html', data_summary=data_summary, chart_div=chart_div)
+        output_format = request.form.get('output_format')
+        data_summary, results = run_analysis(start_date, end_date, strategy, output_format)
+        return render_template('analysis.html', data_summary=data_summary, results=results)
 
     data_summary = get_data_summary()
     return render_template('analysis.html', data_summary=data_summary)
+
+@bp.route('/export_signals')
+def export_signals():
+    signals = session.get('signals', [])
+    if not signals:
+        return "No signals to export."
+
+    df = pd.DataFrame(signals)
+    return Response(
+        df.to_csv(index=False),
+        mimetype="text/csv",
+        headers={"Content-disposition":
+                 "attachment; filename=signals.csv"})
 
 @bp.route('/get_signals', methods=['GET'])
 def get_signals():
