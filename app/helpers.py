@@ -92,3 +92,18 @@ def create_candlestick_chart(df, signals, symbol):
                       ])
 
     return fig.to_html(full_html=False)
+
+_symbols_cache = None
+def get_futures_symbols():
+    global _symbols_cache
+    if _symbols_cache:
+        return _symbols_cache
+
+    try:
+        url = "https://public.fyers.in/sym_details/NSE_FO.csv"
+        df = pd.read_csv(url, header=None)
+        _symbols_cache = sorted(list(df[12].unique()))
+        return _symbols_cache
+    except Exception as e:
+        print(f"Error fetching futures symbols: {e}")
+        return []

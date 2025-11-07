@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 import pandas as pd
-from app.helpers import load_data_from_csv, calculate_vwap, get_data_summary
+from app.helpers import load_data_from_csv, calculate_vwap, get_data_summary, get_futures_symbols
 import os
 import shutil
 
@@ -42,6 +43,13 @@ class TestHelpers(unittest.TestCase):
         df = calculate_vwap(df)
         self.assertIn('vwap', df.columns)
         self.assertAlmostEqual(df['vwap'].iloc[-1], 100.9, places=1)
+
+    @patch('app.helpers.pd.read_csv')
+    def test_get_futures_symbols(self, mock_read_csv):
+        mock_df = pd.DataFrame({12: ['NIFTY', 'BANKNIFTY', 'NIFTY']})
+        mock_read_csv.return_value = mock_df
+        symbols = get_futures_symbols()
+        self.assertEqual(symbols, ['BANKNIFTY', 'NIFTY'])
 
 if __name__ == '__main__':
     unittest.main()

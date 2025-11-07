@@ -5,7 +5,7 @@ import talib
 import os
 import logging
 from config import FYERS_CLIENT_ID, FYERS_SECRET_KEY, FYERS_REDIRECT_URI, TESTING
-from .helpers import load_data_from_csv, calculate_vwap, get_data_summary, create_candlestick_chart
+from .helpers import load_data_from_csv, calculate_vwap, get_data_summary, create_candlestick_chart, get_futures_symbols
 
 bp = Blueprint('main', __name__)
 
@@ -38,8 +38,8 @@ def futures():
 @bp.route('/api/get_symbols', methods=['GET'])
 def get_symbols():
     logging.info("API: Getting symbols")
-    # Placeholder
-    return jsonify({'symbols': ['NIFTY', 'BANKNIFTY']})
+    symbols = get_futures_symbols()
+    return jsonify({'symbols': symbols})
 
 @bp.route('/api/get_expiries', methods=['GET'])
 def get_expiries():
@@ -52,6 +52,27 @@ def get_strikes():
     logging.info(f"API: Getting strikes for {request.args.get('symbol')} and {request.args.get('expiry')}")
     # Placeholder
     return jsonify({'strikes': [18000, 18100, 18200]})
+
+@bp.route('/api/get_option_chain', methods=['GET'])
+def get_option_chain():
+    symbol = request.args.get('symbol')
+    logging.info(f"API: Getting option chain for {symbol}")
+    # In a real app, you'd call the Fyers API here
+    # data = {"symbol": symbol, "strikecount": 10}
+    # response = fyers.options_chain(data=data)
+    # For now, using mock data
+    mock_response = {
+        "s": "ok",
+        "d": {
+            "stk_name": "NIFTY",
+            "option_chain": [
+                {"strike_price": 18000, "ce_symbol": "NIFTY25NOV18000CE", "pe_symbol": "NIFTY25NOV18000PE"},
+                {"strike_price": 18100, "ce_symbol": "NIFTY25NOV18100CE", "pe_symbol": "NIFTY25NOV18100PE"},
+            ]
+        },
+        "message": ""
+    }
+    return jsonify(mock_response)
 
 @bp.route('/login')
 def login():
